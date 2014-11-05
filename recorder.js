@@ -19,8 +19,10 @@
     var recording = false,
       currCallback;
 
+    var self = this;
     this.node.onaudioprocess = function(e){
       if (!recording) return;
+      self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
       worker.postMessage({
         command: 'record',
         buffer: [
@@ -64,6 +66,12 @@
         type: type
       });
     }
+
+    this.shutdown = function(){
+      worker.terminate();
+      source.disconnect();
+      this.node.disconnect();
+    };
 
     worker.onmessage = function(e){
       var blob = e.data;
