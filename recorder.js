@@ -1,5 +1,12 @@
-(function(window){
-
+(function (root, factory) {
+  if (typeof exports === 'object') {
+    // CommonJS
+    module.exports = factory();
+  } else {
+    // Global Variables
+    root.Recorder = factory();
+  }
+}(this, function () {
   var WORKER_PATH = 'recorderWorker.js';
 
   var Recorder = function(source, cfg){
@@ -92,6 +99,6 @@
     link.dispatchEvent(click);
   }
 
-  window.Recorder = Recorder;
+  return Recorder;
 
-})(window);
+});
