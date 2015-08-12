@@ -7,12 +7,12 @@
         root.Recorder = factory();
     }
 })(this, function () {
+
     var Recorder = function (source, cfg) {
         var config = cfg || {};
         var bufferLen = config.bufferLen || 4096;
         this.context = source.context;
-        this.node = (this.context.createScriptProcessor ||
-        this.context.createJavaScriptNode).call(this.context, bufferLen, 2, 2);
+        this.node = (this.context.createScriptProcessor || this.context.createJavaScriptNode).call(this.context, bufferLen, 2, 2);
         var recLength = 0,
             recBuffersL = [],
             recBuffersR = [],
@@ -23,50 +23,46 @@
 
         var self = this;
 
-        function onRecord(inputBuffer) {
-            recBuffersL.push(inputBuffer[0]);
-            recBuffersR.push(inputBuffer[1]);
-            recLength += inputBuffer[0].length;
-        }
 
-        function mergeBuffers(recBuffers, recLength){
+        function mergeBuffers(recBuffers, recLength) {
             var result = new Float32Array(recLength);
             var offset = 0;
-            for (var i = 0; i < recBuffers.length; i++){
+            for (var i = 0; i < recBuffers.length; i++) {
                 result.set(recBuffers[i], offset);
                 offset += recBuffers[i].length;
             }
             return result;
         }
 
-        function interleave(inputL, inputR){
+        function interleave(inputL, inputR) {
             var length = inputL.length + inputR.length;
             var result = new Float32Array(length);
 
             var index = 0,
                 inputIndex = 0;
 
-            while (index < length){
+            while (index < length) {
                 result[index++] = inputL[inputIndex];
                 result[index++] = inputR[inputIndex];
                 inputIndex++;
             }
             return result;
         }
-        function floatTo16BitPCM(output, offset, input){
-            for (var i = 0; i < input.length; i++, offset+=2){
+
+        function floatTo16BitPCM(output, offset, input) {
+            for (var i = 0; i < input.length; i++, offset += 2) {
                 var s = Math.max(-1, Math.min(1, input[i]));
                 output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
             }
         }
 
-        function writeString(view, offset, string){
-            for (var i = 0; i < string.length; i++){
+        function writeString(view, offset, string) {
+            for (var i = 0; i < string.length; i++) {
                 view.setUint8(offset + i, string.charCodeAt(i));
             }
         }
 
-        function encodeWAV(samples){
+        function encodeWAV(samples) {
             var buffer = new ArrayBuffer(44 + samples.length * 2);
             var view = new DataView(buffer);
 
@@ -101,14 +97,18 @@
 
             return view;
         }
+
+        function rec(left, right) {
+            recBuffersL.push(left);
+            recBuffersR.push(right);
+            recLength += left.length;
+        }
+
         this.node.onaudioprocess = function (e) {
             if (!recording) return;
             self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
-            var buf = [
-                e.inputBuffer.getChannelData(0),
-                e.inputBuffer.getChannelData(1)
-            ];
-            onRecord(buf);
+            var left = e.inputBuffer.getChannelData(0), right = e.inputBuffer.getChannelData(1);
+            rec(new Float32Array(left), new Float32Array(right));
         };
 
         this.configure = function (cfg) {
@@ -134,23 +134,29 @@
         };
 
         this.getBuffer = function (cb) {
-            currCallback = cb || config.callback;
             var buffers = [];
             buffers.push(mergeBuffers(recBuffersL, recLength));
             buffers.push(mergeBuffers(recBuffersR, recLength));
-            currCallback(buffers);
+            if (typeof cb === 'function') {
+                cb(buffers);
+            } else {
+                throw new Error('There is no callback function to export buffers.');
+            }
         };
 
         this.exportWAV = function (cb, type) {
-            currCallback = cb || config.callback;
+            //currCallback = cb || config.callback;
             type = type || config.type || 'audio/wav';
-            if (!currCallback) throw new Error('Callback not set');
             var bufferL = mergeBuffers(recBuffersL, recLength);
             var bufferR = mergeBuffers(recBuffersR, recLength);
             var interleaved = interleave(bufferL, bufferR);
             var dataview = encodeWAV(interleaved);
             var audioBlob = new Blob([dataview], {type: type});
-            currCallback(audioBlob);
+            if (typeof cb === 'function') {
+                cb(audioBlob);
+            } else {
+                throw new Error('There is no callback function to export file.');
+            }
         };
 
         this.shutdown = function () {
