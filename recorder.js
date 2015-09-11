@@ -107,7 +107,9 @@
         this.node.onaudioprocess = function (e) {
             if (!recording) return;
             self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
-            var left = e.inputBuffer.getChannelData(0), right = e.inputBuffer.getChannelData(1);
+            var left = [], right = [];
+            e.inputBuffer.copyFromChannel(left, 0, 0);
+            e.inputBuffer.copyFromChannel(right, 1, 0);
             rec(new Float32Array(left), new Float32Array(right));
         };
 
