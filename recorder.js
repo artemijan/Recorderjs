@@ -119,12 +119,17 @@
             recLength += left.length;
         }
 
+        function recMono(left) {
+            recBuffersL.push(left);
+            recLength += left.length;
+        }
+
         function onAudioProcessMono(e) {
             if (!recording) return;
             self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
             var left = [];
             e.inputBuffer.copyFromChannel(left, 0, 0);
-            rec(new Float32Array(left));
+            recMono(new Float32Array(left));
         }
 
         function onAudioProcesStereo(e) {
