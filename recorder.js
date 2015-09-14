@@ -127,24 +127,23 @@
         function onAudioProcessMono(e) {
             if (!recording) return;
             self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
-            var left = [];
-            e.inputBuffer.copyFromChannel(left, 0, 0);
+            var left = e.inputBuffer.getChannelData(0);
             recMono(new Float32Array(left));
         }
 
-        function onAudioProcesStereo(e) {
+        function onAudioProcessStereo(e) {
             if (!recording) return;
             self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
-            var left = [], right = [];
-            e.inputBuffer.copyFromChannel(left, 0, 0);
-            e.inputBuffer.copyFromChannel(right, 1, 0);
+            var left, right;
+            left = e.inputBuffer.getChannelData(0);
+            right = e.inputBuffer.getChannelData(1);
             rec(new Float32Array(left), new Float32Array(right));
         }
 
         if (config.channelType === 'mono') {
             this.node.onaudioprocess = onAudioProcessMono;
         } else {
-            this.node.onaudioprocess = onAudioProcesStereo;
+            this.node.onaudioprocess = onAudioProcessStereo;
         }
 
         this.configure = function (cfg) {
