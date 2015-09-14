@@ -12,7 +12,12 @@
         var config = cfg || {};
         var bufferLen = config.bufferLen || 4096;
         this.context = source.context;
-        this.node = (this.context.createScriptProcessor || this.context.createJavaScriptNode).call(this.context, bufferLen, 2, 2);
+        if (config.channelType == 'mono') {
+            this.node = (this.context.createScriptProcessor || this.context.createJavaScriptNode).call(this.context, bufferLen, 1, 1);
+        } else {
+            this.node = (this.context.createScriptProcessor || this.context.createJavaScriptNode).call(this.context, bufferLen, 2, 2);
+        }
+
         var recLength = 0,
             recBuffersL = [],
             recBuffersR = [],
@@ -65,7 +70,6 @@
         function encodeWAV(samples) {
             var buffer = new ArrayBuffer(44 + samples.length * 2);
             var view = new DataView(buffer);
-
             /* RIFF identifier */
             writeString(view, 0, 'RIFF');
             /* RIFF chunk length */
@@ -78,14 +82,25 @@
             view.setUint32(16, 16, true);
             /* sample format (raw) */
             view.setUint16(20, 1, true);
-            /* channel count */
-            view.setUint16(22, 2, true);
-            /* sample rate */
-            view.setUint32(24, sampleRate, true);
-            /* byte rate (sample rate * block align) */
-            view.setUint32(28, sampleRate * 4, true);
-            /* block align (channel count * bytes per sample) */
-            view.setUint16(32, 4, true);
+            if (config.channelType === 'mono') {
+                /* channel count */
+                view.setUint16(22, 1, true);
+                /* sample rate */
+                view.setUint32(24, sampleRate, true);
+                /* byte rate (sample rate * block align) */
+                view.setUint32(28, sampleRate * 2, true);
+                /* block align (channel count * bytes per sample) */
+                view.setUint16(32, 2, true);
+            } else {
+                /* channel count */
+                view.setUint16(22, 2, true);
+                /* sample rate */
+                view.setUint32(24, sampleRate, true);
+                /* byte rate (sample rate * block align) */
+                view.setUint32(28, sampleRate * 4, true);
+                /* block align (channel count * bytes per sample) */
+                view.setUint16(32, 4, true);
+            }
             /* bits per sample */
             view.setUint16(34, 16, true);
             /* data chunk identifier */
@@ -104,14 +119,28 @@
             recLength += left.length;
         }
 
-        this.node.onaudioprocess = function (e) {
+        function onAudioProcessMono(e) {
+            if (!recording) return;
+            self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
+            var left = [];
+            e.inputBuffer.copyFromChannel(left, 0, 0);
+            rec(new Float32Array(left));
+        }
+
+        function onAudioProcesStereo(e) {
             if (!recording) return;
             self.ondata && self.ondata(e.inputBuffer.getChannelData(0));
             var left = [], right = [];
             e.inputBuffer.copyFromChannel(left, 0, 0);
             e.inputBuffer.copyFromChannel(right, 1, 0);
             rec(new Float32Array(left), new Float32Array(right));
-        };
+        }
+
+        if (config.channelType === 'mono') {
+            this.node.onaudioprocess = onAudioProcessMono;
+        } else {
+            this.node.onaudioprocess = onAudioProcesStereo;
+        }
 
         this.configure = function (cfg) {
             for (var prop in cfg) {
@@ -138,7 +167,9 @@
         this.getBuffer = function (cb) {
             var buffers = [];
             buffers.push(mergeBuffers(recBuffersL, recLength));
-            buffers.push(mergeBuffers(recBuffersR, recLength));
+            if (config.channelType !== 'mono') {
+                buffers.push(mergeBuffers(recBuffersR, recLength));
+            }
             if (typeof cb === 'function') {
                 cb(buffers);
             } else {
@@ -150,9 +181,13 @@
             //currCallback = cb || config.callback;
             type = type || config.type || 'audio/wav';
             var bufferL = mergeBuffers(recBuffersL, recLength);
-            var bufferR = mergeBuffers(recBuffersR, recLength);
-            var interleaved = interleave(bufferL, bufferR);
-            var dataview = encodeWAV(interleaved);
+            var bufferR = null;
+            var interleaved = null;
+            if (config.channelType !== 'mono') {
+                bufferR = mergeBuffers(recBuffersR, recLength);
+                interleaved = interleave(bufferL, bufferR);
+            }
+            var dataview = encodeWAV(interleaved || bufferL);
             var audioBlob = new Blob([dataview], {type: type});
             if (typeof cb === 'function') {
                 cb(audioBlob);
